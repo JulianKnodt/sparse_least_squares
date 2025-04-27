@@ -22,6 +22,15 @@ impl<T> CsMatrix<T> {
     }
 }
 
+impl CsMatrix<super::F> {
+    pub fn identity(n: usize) -> Self {
+        Self {
+            pattern: SparsityPattern::identity(n),
+            values: vec![1.; n],
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CsBuilder<T> {
     sparsity_builder: SparsityPatternBuilder,

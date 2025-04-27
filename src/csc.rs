@@ -26,9 +26,27 @@ impl<T> Csc<T> {
     pub fn col(&self, i: usize) -> (&[T], &[usize]) {
         self.0.lane(i)
     }
+    /// Constructs a CSC matrix from a set of triples. Fails if there are duplicate entries.
+    pub fn from_triplets(t: &mut [([usize; 2], T)]) -> Result<Self, BuilderInsertError>
+    where
+        T: Copy,
+    {
+        let [max_x, max_y] = t
+            .iter()
+            .fold([0, 0], |[x, y], ([nx, ny], _)| [x.max(*nx), y.max(*ny)]);
+        let mut builder = CscBuilder::new(max_y, max_x);
+        t.sort_unstable_by_key(|a| a.0);
+        for &([x, y], v) in t.iter() {
+            builder.insert(y, x, v)?;
+        }
+        Ok(builder.build())
+    }
 }
 
 impl Csc<F> {
+    pub fn identity(n: usize) -> Self {
+        Csc(CsMatrix::identity(n))
+    }
     /// Solves a lower triangular system, `self` is a matrix of NxN, and `b` is a column vector of size N
     /// Assuming that b is dense.
     pub fn dense_lower_triangular_solve(&self, b: &[F], out: &mut [F], unit_diagonal: bool) {

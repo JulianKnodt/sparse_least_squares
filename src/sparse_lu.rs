@@ -10,15 +10,15 @@ pub struct LeftLookingLUFactorization<T> {
 }
 
 impl LeftLookingLUFactorization<F> {
+    /// Returns the joint L\U matrix. Here, `L` implicitly has 1 along the diagonal.
+    pub fn lu(&self) -> &Csc<F> {
+        &self.l_u
+    }
+
     /*
     /// Returns the upper triangular part of this matrix.
     pub fn u(&self) -> Csc<T> {
         self.l_u.upper_triangle()
-    }
-
-    /// Returns the joint L\U matrix. Here, `L` implicitly has 1 along the diagonal.
-    pub fn lu(&self) -> &Csc<T> {
-        &self.l_u
     }
 
     /// Returns the lower triangular part of this matrix.
