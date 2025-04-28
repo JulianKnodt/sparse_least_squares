@@ -170,7 +170,7 @@ impl Csc<F> {
     /// `out_sparsity_pattern` must also be pre-sorted.
     ///
     /// Assumes that the diagonal of the sparse matrix is all 1 if `assume_unit` is true.
-    pub fn sparse_lower_triangular_solve_sorted(
+    pub(crate) fn sparse_lower_triangular_solve_sorted(
         &self,
         // input vector idxs & values
         b_idxs: &[usize],
@@ -182,19 +182,23 @@ impl Csc<F> {
         out: &mut [F],
         assume_unit: bool,
     ) {
-        assert_eq!(self.nrows(), self.ncols());
-        assert_eq!(b.len(), b_idxs.len());
-        assert!(b_idxs.iter().all(|&bi| bi < self.ncols()));
+        debug_assert_eq!(self.nrows(), self.ncols());
+        debug_assert_eq!(b.len(), b_idxs.len());
+        debug_assert!(b_idxs.iter().all(|&bi| bi < self.ncols()));
 
-        assert_eq!(out_sparsity_pattern.len(), out.len());
-        assert!(out_sparsity_pattern.iter().all(|&i| i < self.ncols()));
+        debug_assert_eq!(out_sparsity_pattern.len(), out.len());
+        debug_assert!(out_sparsity_pattern.iter().all(|&i| i < self.ncols()));
 
         // initialize out with b
         // TODO can make this more efficient by keeping two iterators in sorted order
         out.fill(0.);
-        for (&bv, &bi) in b.iter().zip(b_idxs.iter()) {
-            let out_pos = out_sparsity_pattern.iter().position(|&p| p == bi).unwrap();
-            out[out_pos] = bv;
+        for i in 0..b.len() {
+            let bv = unsafe { *b.get_unchecked(i) };
+            let bi = unsafe { *b_idxs.get_unchecked(i) };
+            let Some(out_pos) = out_sparsity_pattern.iter().position(|&p| p == bi) else {
+                continue;
+            };
+            *unsafe { out.get_unchecked_mut(out_pos) } = bv;
         }
         // end init
 
@@ -205,21 +209,23 @@ impl Csc<F> {
             if !assume_unit {
                 while iter.next_if(|n| n.0 < row).is_some() {}
                 match iter.peek() {
-                    Some((r, l_val)) if *r == row => out[i] /= **l_val,
+                    Some((r, l_val)) if *r == row => {
+                        *unsafe { out.get_unchecked_mut(i) } /= **l_val
+                    }
                     // here it now becomes implicitly 0,
                     // likely this should introduce NaN or some other behavior.
                     _ => {}
                 }
             }
-            let mul = out[i];
+            let mul = unsafe { *out.get_unchecked(i) };
             for (ni, &nrow) in out_sparsity_pattern.iter().enumerate().skip(i + 1) {
-                assert!(nrow > row);
+                debug_assert!(nrow > row);
                 while iter.next_if(|n| n.0 < nrow).is_some() {}
                 let l_val = match iter.peek() {
                     Some((r, l_val)) if *r == nrow => l_val,
                     _ => continue,
                 };
-                out[ni] -= *l_val * mul;
+                *unsafe { out.get_unchecked_mut(ni) } -= *l_val * mul;
             }
         }
     }
@@ -235,6 +241,7 @@ impl<T> CscBuilder<T> {
         Self(CsBuilder::new(cols, rows))
     }
     /// Convert back from a matrix to a CscBuilder.
+    #[inline]
     pub fn from_mat(mat: Csc<T>) -> Self {
         Self(CsBuilder::from_mat(mat.0))
     }

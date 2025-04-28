@@ -3,8 +3,8 @@
 pub enum BuilderInsertError {
     ///
     MajorTooLow(usize),
-    ///
-    MinorTooLow,
+    /// Provided Minor, Current Minor
+    MinorTooLow(usize, usize),
 }
 
 /// How the sparsity for a matrix is laid out
@@ -53,11 +53,13 @@ impl SparsityPattern {
     /// Treats `self` as lower triangular, even if there are elements in the upper triangle.
     /// Acts as if b is one major lane (i.e. CSC matrix and one column)
     pub fn sparse_lower_triangular_solve(&self, b: &[usize], out: &mut Vec<usize>) {
-        assert!(b.iter().all(|&i| i < self.major_dim()));
+        debug_assert!(b.iter().all(|&i| i < self.major_dim()));
         out.clear();
 
         // From a given starting column, traverses and finds all reachable indices.
         fn reach(sp: &SparsityPattern, j: usize, out: &mut Vec<usize>) {
+            // TODO this may be slow?
+
             // already traversed
             if out.contains(&j) {
                 return;
@@ -74,6 +76,40 @@ impl SparsityPattern {
 
         for &i in b {
             reach(&self, i, out);
+        }
+    }
+
+    /// Computes the output sparsity pattern of `x` in `Ax = b`.
+    /// where A's nonzero pattern is given by `self` and the non-zero indices
+    /// of vector `b` are specified as a slice.
+    /// The output is not necessarily in sorted order, but is topological sort order.
+    /// Treats `self` as lower triangular, even if there are elements in the upper triangle.
+    /// Acts as if b is one major lane (i.e. CSC matrix and one column)
+    pub(crate) fn sparse_lower_triangular_solve_bool(
+        &self,
+        b: &[usize],
+        out: &mut Vec<bool>,
+        stack: &mut Vec<u32>,
+    ) {
+        out.fill(false);
+
+        // From a given starting column, traverses and finds all reachable indices.
+        for &i in b {
+            stack.push(i as u32);
+            while let Some(j) = stack.pop() {
+                // already traversed
+                if out[j as usize] {
+                    return;
+                }
+
+                out[j as usize] = true;
+                for &i in self.lane(j as usize) {
+                    if (i as u32) < j {
+                        continue;
+                    }
+                    stack.push(j as u32);
+                }
+            }
         }
     }
 
@@ -154,7 +190,10 @@ impl SparsityPatternBuilder {
             && !self.buf.minor_indices.is_empty()
             && min <= *self.buf.minor_indices.last().unwrap()
         {
-            return Err(BuilderInsertError::MinorTooLow);
+            return Err(BuilderInsertError::MinorTooLow(
+                min,
+                *self.buf.minor_indices.last().unwrap(),
+            ));
         }
         // add any advances in row.
         for _ in curr_major..maj {
@@ -182,7 +221,7 @@ impl SparsityPatternBuilder {
         self.buf
             .major_offsets
             .resize(self.major_dim + 1, self.buf.minor_indices.len());
-        assert_eq!(self.buf.major_dim(), self.major_dim);
+        debug_assert_eq!(self.buf.major_dim(), self.major_dim);
         self.buf
     }
 
@@ -210,7 +249,7 @@ impl SparsityPatternBuilder {
 
     /// Returns the current major being modified by `self`.
     pub fn current_major(&self) -> usize {
-        assert!(!self.buf.major_offsets.is_empty());
+        debug_assert!(!self.buf.major_offsets.is_empty());
         self.buf.major_offsets.len() - 1
     }
 }

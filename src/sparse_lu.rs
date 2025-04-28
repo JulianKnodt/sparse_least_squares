@@ -64,16 +64,27 @@ impl LeftLookingLUFactorization<F> {
         let mut csc_builder = CscBuilder::new(n, n);
 
         let mut val_buf = vec![];
+        let mut pat_contains = vec![false; n];
         let mut pat_buf = vec![];
+        let mut stack = vec![];
 
         for ci in 0..a.ncols() {
             let curr_mat = csc_builder.build();
 
             let (col_vals, col_ris) = a.col(ci);
-            curr_mat
-                .pattern()
-                .sparse_lower_triangular_solve(col_ris, &mut pat_buf);
-            pat_buf.sort_unstable();
+            curr_mat.pattern().sparse_lower_triangular_solve_bool(
+                col_ris,
+                &mut pat_contains,
+                &mut stack,
+            );
+
+            pat_buf.clear();
+            pat_buf.extend(
+                pat_contains
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, c)| c.then_some(i)),
+            );
             val_buf.resize(pat_buf.len(), 0.);
 
             // Solve the current column, assuming that it is lower triangular
@@ -87,9 +98,13 @@ impl LeftLookingLUFactorization<F> {
 
             // convert builder back to matrix
             csc_builder = CscBuilder::from_mat(curr_mat);
-            assert!(csc_builder.revert_to_col(ci));
+            let v = csc_builder.revert_to_col(ci);
+            debug_assert!(v);
             let mut ukk = 0.;
-            for (row, val) in pat_buf.drain(..).zip(val_buf.drain(..)) {
+            debug_assert_eq!(pat_buf.len(), val_buf.len());
+            for i in 0..pat_buf.len() {
+                let row = unsafe { *pat_buf.get_unchecked(i) };
+                let val = unsafe { *val_buf.get_unchecked(i) };
                 use std::cmp::Ordering;
                 let val = match row.cmp(&ci) {
                     Ordering::Less => val,
@@ -98,11 +113,12 @@ impl LeftLookingLUFactorization<F> {
                         val
                     }
                     Ordering::Greater => {
-                        assert_ne!(ukk, 0.);
+                        debug_assert_ne!(ukk, 0.);
                         val / ukk
                     }
                 };
-                assert_eq!(csc_builder.insert(row, ci, val), Ok(()));
+                let ins = csc_builder.insert(row, ci, val);
+                debug_assert_eq!(ins, Ok(()));
             }
         }
 
