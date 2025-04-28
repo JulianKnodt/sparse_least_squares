@@ -1,4 +1,3 @@
-//use crate::SparseEntryMut;
 use super::F;
 use crate::csc::{Csc, CscBuilder};
 
@@ -37,12 +36,21 @@ impl LeftLookingLUFactorization<F> {
     */
 
     /// Computes `x` in `LUx = b`, where `b` is a dense vector.
-    pub fn solve(&self, b: &[F], dst: &mut [F]) {
-        assert_eq!(b.len(), dst.len());
-        let mut y = vec![0.; b.len()];
+    /// The output will be stored in b, and buf is used as a temporary buffer.
+    pub fn solve(&self, b: &mut [F], buf: &mut [F]) {
+        assert_eq!(b.len(), buf.len());
         // Implementation: Solve two systems: Ly = b, then Ux = y.
-        self.l_u.dense_lower_triangular_solve(b, &mut y, true);
-        self.l_u.dense_upper_triangular_solve(&y, dst);
+        self.l_u.dense_lower_triangular_solve(b, buf, true);
+        self.l_u.dense_upper_triangular_solve(buf, b);
+    }
+
+    /// Computes `x` in `LUx = b`, where `b` is a dense vector.
+    /// The output will be stored in b, and buf is used as a temporary buffer.
+    pub fn solve_arr<const N: usize>(&self, b: &mut [[F; N]], buf: &mut [[F; N]]) {
+        assert_eq!(b.len(), buf.len());
+        // Implementation: Solve two systems: Ly = b, then Ux = y.
+        self.l_u.dense_lower_triangular_solve_arr(b, buf, true);
+        self.l_u.dense_upper_triangular_solve_arr(buf, b);
     }
 
     /// Construct a new sparse LU factorization

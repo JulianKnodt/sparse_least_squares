@@ -20,6 +20,14 @@ impl<T> CsMatrix<T> {
         let e = self.pattern.major_offsets[i + 1];
         (s..e).map(|i| (self.pattern.minor_indices[i], &self.values[i]))
     }
+
+    pub fn values(&self) -> &[T] {
+        &self.values
+    }
+
+    pub fn values_mut(&mut self) -> &mut [T] {
+        &mut self.values
+    }
 }
 
 impl CsMatrix<super::F> {

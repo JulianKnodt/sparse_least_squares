@@ -26,17 +26,41 @@ impl<T> Csc<T> {
     pub fn col(&self, i: usize) -> (&[T], &[usize]) {
         self.0.lane(i)
     }
+
+    pub fn values(&self) -> &[T] {
+        self.0.values()
+    }
+
+    pub fn values_mut(&mut self) -> &mut [T] {
+        self.0.values_mut()
+    }
     /// Constructs a CSC matrix from a set of triples. Fails if there are duplicate entries.
-    pub fn from_triplets(t: &mut [([usize; 2], T)]) -> Result<Self, BuilderInsertError>
+    pub fn from_triplets(
+        rows: usize,
+        cols: usize,
+        t: &mut [([usize; 2], T)],
+    ) -> Result<Self, BuilderInsertError>
     where
         T: Copy,
     {
-        let [max_x, max_y] = t
-            .iter()
-            .fold([0, 0], |[x, y], ([nx, ny], _)| [x.max(*nx), y.max(*ny)]);
-        let mut builder = CscBuilder::new(max_y, max_x);
+        let mut builder = CscBuilder::new(rows, cols);
         t.sort_unstable_by_key(|a| a.0);
         for &([x, y], v) in t.iter() {
+            builder.insert(y, x, v)?;
+        }
+        Ok(builder.build())
+    }
+
+    pub fn from_btreemap(
+        rows: usize,
+        cols: usize,
+        map: &std::collections::BTreeMap<[usize; 2], T>,
+    ) -> Result<Self, BuilderInsertError>
+    where
+        T: Copy,
+    {
+        let mut builder = CscBuilder::new(rows, cols);
+        for (&[x, y], &v) in map.iter() {
             builder.insert(y, x, v)?;
         }
         Ok(builder.build())
@@ -50,6 +74,20 @@ impl Csc<F> {
     /// Solves a lower triangular system, `self` is a matrix of NxN, and `b` is a column vector of size N
     /// Assuming that b is dense.
     pub fn dense_lower_triangular_solve(&self, b: &[F], out: &mut [F], unit_diagonal: bool) {
+        self.dense_lower_triangular_solve_arr(
+            unsafe { std::mem::transmute::<_, &[[F; 1]]>(b) },
+            unsafe { std::mem::transmute(out) },
+            unit_diagonal,
+        );
+    }
+    /// Solves a lower triangular system, `self` is a matrix of NxN, and `b` is a column vector of size N
+    /// Assuming that b is dense.
+    pub fn dense_lower_triangular_solve_arr<const N: usize>(
+        &self,
+        b: &[[F; N]],
+        out: &mut [[F; N]],
+        unit_diagonal: bool,
+    ) {
         assert_eq!(self.nrows(), self.ncols());
         assert_eq!(self.ncols(), b.len());
         assert_eq!(out.len(), b.len());
@@ -57,22 +95,24 @@ impl Csc<F> {
         let n = b.len();
 
         for i in 0..n {
-            let mut iter = self.col_iter(i).peekable();
-            while iter.next_if(|n| n.0 < i).is_some() {}
-            if let Some(n) = iter.peek() {
-                if n.0 == i && !unit_diagonal {
-                    assert!(n.0 <= i);
-                    out[i] /= n.1;
-                    iter.next();
+            for d in 0..N {
+                let mut iter = self.col_iter(i).peekable();
+                while iter.next_if(|n| n.0 < i).is_some() {}
+                if let Some(n) = iter.peek() {
+                    if n.0 == i && !unit_diagonal {
+                        assert!(n.0 <= i);
+                        out[i][d] /= n.1;
+                        iter.next();
+                    }
                 }
-            }
-            let mul = out[i];
-            for (ri, v) in self.col_iter(i) {
-                use std::cmp::Ordering::*;
-                // ensure that only using the lower part
-                match ri.cmp(&i) {
-                    Greater => out[ri] -= v * mul,
-                    Equal | Less => {}
+                let mul = out[i][d];
+                for (ri, v) in self.col_iter(i) {
+                    use std::cmp::Ordering::*;
+                    // ensure that only using the lower part
+                    match ri.cmp(&i) {
+                        Greater => out[ri][d] -= v * mul,
+                        Equal | Less => {}
+                    }
                 }
             }
         }
@@ -81,6 +121,19 @@ impl Csc<F> {
     /// Solves an upper triangular system, `self` is a matrix of NxN, and `b` is a column vector of size N
     /// Assuming that b is dense.
     pub fn dense_upper_triangular_solve(&self, b: &[F], out: &mut [F]) {
+        self.dense_upper_triangular_solve_arr(
+            unsafe { std::mem::transmute::<_, &[[F; 1]]>(b) },
+            unsafe { std::mem::transmute(out) },
+        );
+    }
+
+    /// Solves an upper triangular system, `self` is a matrix of NxN, and `b` is a column vector of size N
+    /// Assuming that b is dense.
+    pub fn dense_upper_triangular_solve_arr<const N: usize>(
+        &self,
+        b: &[[F; N]],
+        out: &mut [[F; N]],
+    ) {
         assert_eq!(self.nrows(), self.ncols());
         assert_eq!(self.ncols(), b.len());
         assert_eq!(out.len(), b.len());
@@ -88,21 +141,23 @@ impl Csc<F> {
         let n = b.len();
 
         for i in (0..n).rev() {
-            let mut iter = self.col_iter(i).rev().peekable();
-            while iter.next_if(|n| n.0 > i).is_some() {}
-            if let Some(n) = iter.peek() {
-                if n.0 == i {
-                    out[i] /= *n.1;
-                    iter.next();
+            for d in 0..N {
+                let mut iter = self.col_iter(i).rev().peekable();
+                while iter.next_if(|n| n.0 > i).is_some() {}
+                if let Some(n) = iter.peek() {
+                    if n.0 == i {
+                        out[i][d] /= *n.1;
+                        iter.next();
+                    }
                 }
-            }
-            // introduce a NaN, intentionally, if the diagonal doesn't have a value.
-            let mul = out[i];
-            for (row, &v) in iter {
-                use std::cmp::Ordering::*;
-                match row.cmp(&i) {
-                    Less => out[row] -= v * mul,
-                    Equal | Greater => {}
+                // introduce a NaN, intentionally, if the diagonal doesn't have a value.
+                let mul = out[i][d];
+                for (row, &v) in iter {
+                    use std::cmp::Ordering::*;
+                    match row.cmp(&i) {
+                        Less => out[row][d] -= v * mul,
+                        Equal | Greater => {}
+                    }
                 }
             }
         }
