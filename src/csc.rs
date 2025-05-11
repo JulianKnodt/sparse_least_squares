@@ -57,14 +57,15 @@ impl<T> Csc<T> {
         rows: usize,
         cols: usize,
         t: &mut [([usize; 2], T)],
+        add: impl Fn(T, T) -> T + Copy,
     ) -> Result<Self, BuilderInsertError>
     where
-        T: Copy + core::ops::AddAssign,
+        T: Copy,
     {
         let mut builder = CscBuilder::new(rows, cols);
         t.sort_unstable_by_key(|a| a.0);
         for &([x, y], v) in t.iter() {
-            builder.insert_sum(y, x, v)?;
+            builder.insert_sum(y, x, v, add)?;
         }
         Ok(builder.build())
     }
@@ -247,6 +248,16 @@ impl Csc<F> {
             }
         }
     }
+    pub fn vecmul(&self, v: &[F]) -> Vec<F> {
+        let mut out = vec![0.; self.nrows()];
+        for i in 0..self.ncols() {
+            let val = v[i];
+            for (r, &v) in self.col_iter(i) {
+                out[r] += val * v;
+            }
+        }
+        out
+    }
 }
 
 /// An incremental builder for a Csc matrix.
@@ -271,11 +282,17 @@ impl<T> CscBuilder<T> {
     pub fn insert(&mut self, row: usize, col: usize, val: T) -> Result<(), BuilderInsertError> {
         self.0.insert(col, row, val)
     }
-    pub fn insert_sum(&mut self, row: usize, col: usize, val: T) -> Result<bool, BuilderInsertError>
+    pub fn insert_sum(
+        &mut self,
+        row: usize,
+        col: usize,
+        val: T,
+        add: impl Fn(T, T) -> T + Copy,
+    ) -> Result<bool, BuilderInsertError>
     where
-        T: core::ops::AddAssign,
+        T: Copy,
     {
-        self.0.insert_sum(col, row, val)
+        self.0.insert_sum(col, row, val, add)
     }
     /// Converts this builder into a valid Csc.
     pub fn build(self) -> Csc<T> {

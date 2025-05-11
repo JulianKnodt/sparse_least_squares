@@ -2,7 +2,7 @@
 use std::assert_matches::assert_matches;
 
 use sparse_lu::LeftLookingLUFactorization;
-use sparse_lu::csc::CscBuilder;
+use sparse_lu::csc::{Csc, CscBuilder};
 
 #[test]
 fn test_basic_lu_factorization() {
@@ -48,4 +48,30 @@ fn test_basic_lu_factorization_with_one_more_entry() {
     let gt = ground_truth.build();
 
     assert_eq!(lu_fact.lu(), &gt);
+}
+
+#[test]
+pub fn test_lu_fact() {
+    let a = Csc::from_triplets(
+        3,
+        3,
+        &mut [
+            ([0, 0], 47.),
+            ([0, 1], 91.),
+            ([0, 2], 51.),
+            ([1, 0], 92.),
+            ([1, 1], 12.),
+            ([1, 2], 31.),
+            ([2, 0], 16.),
+            ([2, 1], 29.),
+            ([2, 2], 87.),
+        ],
+    )
+    .unwrap();
+    let lu_fact = LeftLookingLUFactorization::new(&a);
+    let mut buf = [0.; 3];
+    let mut out = [1.; 3];
+    lu_fact.solve(&mut out, &mut buf);
+    let solved = a.vecmul(&out);
+    assert_eq!(solved, [1.; 3]);
 }

@@ -53,7 +53,7 @@ impl SparsityPattern {
     /// Treats `self` as lower triangular, even if there are elements in the upper triangle.
     /// Acts as if b is one major lane (i.e. CSC matrix and one column)
     pub fn sparse_lower_triangular_solve(&self, b: &[usize], out: &mut Vec<usize>) {
-        debug_assert!(b.iter().all(|&i| i < self.major_dim()));
+        assert!(b.iter().all(|&i| i < self.major_dim()));
         out.clear();
 
         // From a given starting column, traverses and finds all reachable indices.
@@ -88,9 +88,10 @@ impl SparsityPattern {
     pub(crate) fn sparse_lower_triangular_solve_bool(
         &self,
         b: &[usize],
-        out: &mut Vec<bool>,
+        out: &mut [bool],
         stack: &mut Vec<u32>,
     ) {
+        assert!(stack.is_empty());
         out.fill(false);
 
         // From a given starting column, traverses and finds all reachable indices.
@@ -99,7 +100,7 @@ impl SparsityPattern {
             while let Some(j) = stack.pop() {
                 // already traversed
                 if out[j as usize] {
-                    return;
+                    continue;
                 }
 
                 out[j as usize] = true;
