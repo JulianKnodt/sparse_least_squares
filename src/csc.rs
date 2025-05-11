@@ -51,6 +51,24 @@ impl<T> Csc<T> {
         Ok(builder.build())
     }
 
+    /// Constructs a CSC matrix from a set of triples. If there are duplicate entries, sums
+    /// them.
+    pub fn from_triplets_summed(
+        rows: usize,
+        cols: usize,
+        t: &mut [([usize; 2], T)],
+    ) -> Result<Self, BuilderInsertError>
+    where
+        T: Copy + core::ops::AddAssign,
+    {
+        let mut builder = CscBuilder::new(rows, cols);
+        t.sort_unstable_by_key(|a| a.0);
+        for &([x, y], v) in t.iter() {
+            builder.insert_sum(y, x, v)?;
+        }
+        Ok(builder.build())
+    }
+
     pub fn from_btreemap(
         rows: usize,
         cols: usize,
@@ -252,6 +270,12 @@ impl<T> CscBuilder<T> {
     /// Inserts a value into the builder. Must be called in ascending col, row order.
     pub fn insert(&mut self, row: usize, col: usize, val: T) -> Result<(), BuilderInsertError> {
         self.0.insert(col, row, val)
+    }
+    pub fn insert_sum(&mut self, row: usize, col: usize, val: T) -> Result<bool, BuilderInsertError>
+    where
+        T: core::ops::AddAssign,
+    {
+        self.0.insert_sum(col, row, val)
     }
     /// Converts this builder into a valid Csc.
     pub fn build(self) -> Csc<T> {

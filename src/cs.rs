@@ -76,6 +76,18 @@ impl<T> CsBuilder<T> {
         self.values.push(val);
         Ok(())
     }
+    pub fn insert_sum(&mut self, maj: usize, min: usize, val: T) -> Result<bool, BuilderInsertError>
+    where
+        T: core::ops::AddAssign,
+    {
+        if self.sparsity_builder.insert_sum(maj, min)? {
+            *self.values.last_mut().unwrap() += val;
+            Ok(true)
+        } else {
+            self.values.push(val);
+            Ok(false)
+        }
+    }
     pub fn build(self) -> CsMatrix<T> {
         let CsBuilder {
             sparsity_builder,

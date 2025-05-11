@@ -202,6 +202,18 @@ impl SparsityPatternBuilder {
         self.buf.minor_indices.push(min);
         Ok(())
     }
+
+    pub fn insert_sum(&mut self, maj: usize, min: usize) -> Result<bool, BuilderInsertError> {
+        let curr_major = self.buf.major_dim();
+        if maj == curr_major
+            && *self.buf.major_offsets.last().unwrap() < self.buf.minor_indices.len()
+            && !self.buf.minor_indices.is_empty()
+            && min == *self.buf.minor_indices.last().unwrap()
+        {
+            return Ok(true);
+        }
+        self.insert(maj, min).map(|()| false)
+    }
     /*
     /// Returns a valid partial sparsity pattern.
     /// All the major lanes up to the current insertion will be completed.
