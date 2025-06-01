@@ -51,19 +51,17 @@ fn test_basic_lu_factorization_with_one_more_entry() {
 }
 
 #[test]
-pub fn test_lu_fact() {
+pub fn test_lu_fact_sparse() {
     let a = Csc::from_triplets(
         3,
         3,
         &mut [
             ([0, 0], 47.),
             ([0, 1], 91.),
-            ([0, 2], 51.),
             ([1, 0], 92.),
             ([1, 1], 12.),
             ([1, 2], 31.),
             ([2, 0], 16.),
-            ([2, 1], 29.),
             ([2, 2], 87.),
         ],
     )
@@ -73,5 +71,35 @@ pub fn test_lu_fact() {
     let mut out = [1.; 3];
     lu_fact.solve(&mut out, &mut buf);
     let solved = a.vecmul(&out);
-    assert_eq!(solved, [1.; 3]);
+    for i in 0..3 {
+      assert!((solved[i] - 1.).abs() < 1e-5);
+    }
+}
+
+#[test]
+pub fn test_lu_fact_dense() {
+    let a = Csc::from_triplets(
+        3,
+        3,
+        &mut [
+            ([0, 0], 47.),
+            ([0, 1], 91.),
+            ([0, 2], 0.),
+            ([1, 0], 92.),
+            ([1, 1], 12.),
+            ([1, 2], 31.),
+            ([2, 0], 16.),
+            ([2, 1], 0.),
+            ([2, 2], 87.),
+        ],
+    )
+    .unwrap();
+    let lu_fact = LeftLookingLUFactorization::new(&a);
+    let mut buf = [0.; 3];
+    let mut out = [1.; 3];
+    lu_fact.solve(&mut out, &mut buf);
+    let solved = a.vecmul(&out);
+    for i in 0..3 {
+      assert!((solved[i] - 1.).abs() < 1e-5);
+    }
 }

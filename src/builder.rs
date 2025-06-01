@@ -108,7 +108,7 @@ impl SparsityPattern {
                     if (i as u32) < j {
                         continue;
                     }
-                    stack.push(j as u32);
+                    stack.push(i as u32);
                 }
             }
         }
