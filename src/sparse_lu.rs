@@ -77,7 +77,6 @@ impl LeftLookingLUFactorization<F> {
                 &mut pat_contains,
                 &mut stack,
             );
-
             pat_buf.clear();
             pat_buf.extend(
                 pat_contains
@@ -85,6 +84,8 @@ impl LeftLookingLUFactorization<F> {
                     .enumerate()
                     .filter_map(|(i, c)| c.then_some(i)),
             );
+
+
             val_buf.resize(pat_buf.len(), 0.);
 
             // Solve the current column, assuming that it is lower triangular
@@ -113,16 +114,18 @@ impl LeftLookingLUFactorization<F> {
                         val
                     }
                     Ordering::Greater => {
-                        debug_assert_ne!(ukk, 0.);
+                        assert_ne!(ukk, 0., "{val} {i} row={row} col={ci}");
                         val / ukk
                     }
                 };
+                assert!(val.is_finite());
                 let ins = csc_builder.insert(row, ci, val);
                 debug_assert_eq!(ins, Ok(()));
             }
         }
 
         let l_u = csc_builder.build();
+        assert!(l_u.values().iter().copied().all(F::is_finite));
         Self { l_u }
     }
 }
