@@ -23,7 +23,6 @@ impl LeftLookingLUFactorization<F> {
     pub fn pivot(&self) -> &[usize] {
         &self.pivot
     }
-    //fn apply_pivot<T>(&self, v: &mut [T]) {}
 
     /*
     /// Returns the upper triangular part of this matrix.
@@ -49,16 +48,22 @@ impl LeftLookingLUFactorization<F> {
     /// Computes `x` in `LUx = b`, where `b` is a dense vector.
     /// The output will be stored in b, and buf is used as a temporary buffer.
     pub fn solve(&self, b: &mut [F], buf: &mut [F]) {
-        assert_eq!(b.len(), buf.len());
-        // Implementation: Solve two systems: Ly = b, then Ux = y.
-        self.l_u.dense_lower_triangular_solve(b, buf, true);
-        self.l_u.dense_upper_triangular_solve(buf, b);
+        self.solve_arr(
+            unsafe { std::mem::transmute::<_, &mut [[F; 1]]>(b) },
+            unsafe { std::mem::transmute::<_, &mut [[F; 1]]>(buf) },
+        );
     }
 
     /// Computes `x` in `LUx = b`, where `b` is a dense vector.
     /// The output will be stored in b, and buf is used as a temporary buffer.
     pub fn solve_arr<const N: usize>(&self, b: &mut [[F; N]], buf: &mut [[F; N]]) {
         assert_eq!(b.len(), buf.len());
+        let n = b.len();
+        // apply pivot to b
+        buf.copy_from_slice(b);
+        for i in 0..n {
+            b[i] = buf[self.pivot[i]];
+        }
         // Implementation: Solve two systems: Ly = b, then Ux = y.
         self.l_u.dense_lower_triangular_solve_arr(b, buf, true);
         self.l_u.dense_upper_triangular_solve_arr(buf, b);
@@ -67,6 +72,7 @@ impl LeftLookingLUFactorization<F> {
     /// Construct a new sparse LU factorization
     /// from a given CSC matrix.
     pub fn new(a: &Csc<F>) -> Self {
+        let mut a = a.clone(); // TODO tmp remove this later
         assert_eq!(a.nrows(), a.ncols());
         let n = a.nrows();
 
@@ -85,14 +91,7 @@ impl LeftLookingLUFactorization<F> {
         let mut stack = vec![];
 
         for ci in 0..n {
-            let curr_mat = csc_builder.build();
-            /*
-            let col_iter = curr_mat.col_iter(ci);
-            let opt = col_iter
-                .max_by(|a, b| a.1.total_cmp(&b.1))
-                .expect("Non-full rank input").0;
-            println!("{}", opt);
-            */
+            let mut curr_mat = csc_builder.build();
 
             let (col_vals, col_ris) = a.col(ci);
             curr_mat.pattern().sparse_lower_triangular_solve_bool(
@@ -110,6 +109,8 @@ impl LeftLookingLUFactorization<F> {
 
             val_buf.resize(pat_buf.len(), 0.);
 
+            // sort pat and val buf here
+
             // Solve the current column, assuming that it is lower triangular
             curr_mat.sparse_lower_triangular_solve_sorted(
                 col_ris,
@@ -119,26 +120,63 @@ impl LeftLookingLUFactorization<F> {
                 true,
             );
 
+            // find optimal pivot
+            // TODO remove these unwraps
+            let best_i = val_buf
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| pat_buf[i] >= ci)
+                .max_by(|&(_, a), &(_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
+                .map(|v| v.0)
+                .unwrap_or(ci);
+
+            let ukk = val_buf[best_i];
+            assert_ne!(ukk, 0., "rank-deficient matrix");
+
+            let best_i = pat_buf[best_i];
+            if best_i != ci {
+                for row in pat_buf.iter_mut() {
+                    if *row == ci {
+                        *row = best_i;
+                    } else if *row == best_i {
+                        *row = ci;
+                    }
+                }
+                // One pass of insertion sort to sort the array
+                // in theory it do slightly less work by only checking the values swapped
+                // but meh.
+                for i in 0..pat_buf.len() - 1 {
+                    if pat_buf[i] > pat_buf[i + 1] {
+                        pat_buf.swap(i, i + 1);
+                        val_buf.swap(i, i + 1);
+                    }
+                }
+                for i in (1..pat_buf.len()).rev() {
+                    if pat_buf[i - 1] > pat_buf[i] {
+                        pat_buf.swap(i - 1, i);
+                        val_buf.swap(i - 1, i);
+                    }
+                }
+                assert!(pat_buf.is_sorted());
+
+                pivot.swap(ci, best_i);
+                curr_mat.swap_rows(ci, best_i);
+                a.swap_rows(ci, best_i);
+            }
+
             // convert builder back to matrix
             csc_builder = CscBuilder::from_mat(curr_mat);
             let v = csc_builder.revert_to_col(ci);
             debug_assert!(v);
-            let mut ukk = 0.;
             debug_assert_eq!(pat_buf.len(), val_buf.len());
+
             for i in 0..pat_buf.len() {
                 let row = unsafe { *pat_buf.get_unchecked(i) };
                 let val = unsafe { *val_buf.get_unchecked(i) };
                 use std::cmp::Ordering;
                 let val = match row.cmp(&ci) {
-                    Ordering::Less => val,
-                    Ordering::Equal => {
-                        ukk = val;
-                        val
-                    }
-                    Ordering::Greater => {
-                        assert_ne!(ukk, 0., "{val} {i} row={row} col={ci}");
-                        val / ukk
-                    }
+                    Ordering::Less | Ordering::Equal => val,
+                    Ordering::Greater => val / ukk,
                 };
                 assert!(val.is_finite());
                 let ins = csc_builder.insert(row, ci, val);

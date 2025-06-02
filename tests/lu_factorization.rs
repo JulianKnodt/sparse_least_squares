@@ -21,12 +21,12 @@ fn test_basic_lu_factorization() {
 
 #[test]
 fn test_basic_lu_factorization_with_one_more_entry() {
-    let n = 3;
+    let n = 2;
     let mut a = CscBuilder::new(n, n);
     for i in 0..n {
-        assert!(a.insert(i, i, if i == 0 { 0.5 } else { 1. }).is_ok());
+        assert!(a.insert(i, i, if i == 0 { 1. } else { 0.5 }).is_ok());
         if i == 0 {
-            assert_matches!(a.insert(1, 0, 1.), Ok(_));
+            assert_matches!(a.insert(1, 0, 2.), Ok(_));
         }
     }
     // construct an identity matrix as a basic test
@@ -34,20 +34,21 @@ fn test_basic_lu_factorization_with_one_more_entry() {
 
     let lu_fact = LeftLookingLUFactorization::new(&a);
 
-    let mut ground_truth = CscBuilder::new(n, n);
-    for i in 0..n {
-        assert!(
-            ground_truth
-                .insert(i, i, if i == 0 { 0.5 } else { 1. })
-                .is_ok()
-        );
-        if i == 0 {
-            assert!(ground_truth.insert(1, 0, 2.).is_ok());
-        }
-    }
-    let gt = ground_truth.build();
+    let gt = Csc::from_triplets(
+        2,
+        2,
+        &mut [
+            ([0, 0], 2.), //
+            ([0, 1], 0.5),
+            ([1, 0], 0.5),
+            ([1, 1], -0.25),
+        ],
+    )
+    .unwrap();
 
-    assert_eq!(lu_fact.lu(), &gt);
+    assert_eq!(lu_fact.pivot(), &[1, 0]);
+    let new_lu = lu_fact.lu();
+    assert_eq!(lu_fact.lu(), &gt, "{:?} {:?}", new_lu.col(0), new_lu.col(1));
 }
 
 #[test]
@@ -68,11 +69,12 @@ pub fn test_lu_fact_sparse() {
     .unwrap();
     let lu_fact = LeftLookingLUFactorization::new(&a);
     let mut buf = [0.; 3];
-    let mut out = [1.; 3];
+    let mut out = [1., 2., 4.];
+    let og = out;
     lu_fact.solve(&mut out, &mut buf);
     let solved = a.vecmul(&out);
     for i in 0..3 {
-        assert!((solved[i] - 1.).abs() < 1e-5);
+        assert!((solved[i] - og[i]).abs() < 1e-5);
     }
 }
 
@@ -124,11 +126,13 @@ pub fn test_lu_fact_dense() {
     )
     .unwrap();
     let lu_fact = LeftLookingLUFactorization::new(&a);
+    assert_eq!(lu_fact.pivot(), &[1, 0, 2]);
     let mut buf = [0.; 3];
-    let mut out = [1.; 3];
+    let mut out = [1., 2., 4.];
+    let og = out;
     lu_fact.solve(&mut out, &mut buf);
     let solved = a.vecmul(&out);
     for i in 0..3 {
-        assert!((solved[i] - 1.).abs() < 1e-5);
+        assert!((solved[i] - og[i]).abs() < 1e-5, "{:?}", solved);
     }
 }

@@ -31,6 +31,26 @@ impl<T> CsMatrix<T> {
                 *i = a;
             }
         }
+        // for each major, resort the indices
+        for i in 0..self.pattern.major_dim() {
+            let s = self.pattern.major_offsets[i];
+            let e = self.pattern.major_offsets[i + 1];
+            for idx in s..e.saturating_sub(1) {
+                let mi = &self.pattern.minor_indices;
+                if mi[idx] > mi[idx + 1] {
+                    self.values.swap(idx, idx + 1);
+                    self.pattern.minor_indices.swap(idx, idx + 1);
+                }
+            }
+
+            for idx in (s + 1..e).rev() {
+                let mi = &self.pattern.minor_indices;
+                if mi[idx - 1] > mi[idx] {
+                    self.values.swap(idx - 1, idx);
+                    self.pattern.minor_indices.swap(idx - 1, idx);
+                }
+            }
+        }
     }
     pub fn lane_iter(
         &self,
@@ -91,12 +111,17 @@ impl<T> CsBuilder<T> {
         self.values.truncate(self.sparsity_builder.num_entries());
         true
     }
-    pub fn insert(&mut self, maj: usize, min: usize, val: T) -> Result<(), BuilderInsertError> {
+    pub(crate) fn insert(
+        &mut self,
+        maj: usize,
+        min: usize,
+        val: T,
+    ) -> Result<(), BuilderInsertError> {
         self.sparsity_builder.insert(maj, min)?;
         self.values.push(val);
         Ok(())
     }
-    pub fn insert_sum(
+    pub(crate) fn insert_sum(
         &mut self,
         maj: usize,
         min: usize,

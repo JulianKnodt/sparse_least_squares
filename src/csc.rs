@@ -301,6 +301,7 @@ impl<T> CscBuilder<T> {
     pub fn insert(&mut self, row: usize, col: usize, val: T) -> Result<(), BuilderInsertError> {
         self.0.insert(col, row, val)
     }
+
     pub fn insert_sum(
         &mut self,
         row: usize,
