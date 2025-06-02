@@ -18,3 +18,5 @@ pub use csc::Csc;
 /// Sparse LU algorithm
 mod sparse_lu;
 pub use sparse_lu::LeftLookingLUFactorization;
+
+// TODO implement gauss seidel?
