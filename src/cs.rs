@@ -12,6 +12,26 @@ impl<T> CsMatrix<T> {
         let e = self.pattern.major_offsets[i + 1];
         (&self.values[s..e], &self.pattern.minor_indices[s..e])
     }
+    /*
+    pub(crate) fn lane_mut(&mut self, i: usize) -> (&mut [T], &mut [usize]) {
+        let s = self.pattern.major_offsets[i];
+        let e = self.pattern.major_offsets[i + 1];
+        (
+            &mut self.values[s..e],
+            &mut self.pattern.minor_indices[s..e],
+        )
+    }
+    */
+
+    pub(crate) fn swap_minor(&mut self, a: usize, b: usize) {
+        for i in self.pattern.minor_indices.iter_mut() {
+            if *i == a {
+                *i = b;
+            } else if *i == b {
+                *i = a;
+            }
+        }
+    }
     pub fn lane_iter(
         &self,
         i: usize,

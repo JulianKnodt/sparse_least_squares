@@ -16,16 +16,19 @@ pub struct SparsityPattern {
 }
 
 impl SparsityPattern {
+    #[inline]
     pub fn major_dim(&self) -> usize {
         self.major_offsets.len() - 1
     }
 
+    #[inline]
     pub fn lane(&self, i: usize) -> &[usize] {
         let s = self.major_offsets[i];
         let e = self.major_offsets[i + 1];
         &self.minor_indices[s..e]
     }
 
+    #[inline]
     pub fn nnz(&self) -> usize {
         self.minor_indices.len()
     }

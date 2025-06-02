@@ -23,8 +23,22 @@ impl<T> Csc<T> {
         &self.0.pattern
     }
 
+    pub fn swap_rows(&mut self, a: usize, b: usize) {
+        self.0.swap_minor(a, b);
+    }
+
     pub fn col(&self, i: usize) -> (&[T], &[usize]) {
         self.0.lane(i)
+    }
+    /*
+    pub(crate) fn col_mut(&mut self, i: usize) -> (&mut [T], &mut [usize]) {
+        self.0.lane_mut(i)
+    }
+    */
+
+    /// Number of non-zero entries in this matrix
+    pub fn nnz(&self) -> usize {
+        self.pattern().nnz()
     }
 
     pub fn values(&self) -> &[T] {
@@ -120,7 +134,9 @@ impl Csc<F> {
                 if let Some(n) = iter.peek() {
                     if n.0 == i && !unit_diagonal {
                         assert!(n.0 <= i);
+                        assert!(n.1.abs() > 1e-10, "{}", n.1);
                         out[i][d] /= n.1;
+                        assert!(out[i][d].is_finite());
                         iter.next();
                     }
                 }
@@ -165,7 +181,8 @@ impl Csc<F> {
                 while iter.next_if(|n| n.0 > i).is_some() {}
                 if let Some(n) = iter.peek() {
                     if n.0 == i {
-                        out[i][d] /= *n.1;
+                        assert!(n.1.abs() > 1e-8);
+                        out[i][d] /= n.1;
                         iter.next();
                     }
                 }
@@ -229,7 +246,9 @@ impl Csc<F> {
                 while iter.next_if(|n| n.0 < row).is_some() {}
                 match iter.peek() {
                     Some((r, l_val)) if *r == row => {
-                        *unsafe { out.get_unchecked_mut(i) } /= **l_val
+                        let dst = unsafe { out.get_unchecked_mut(i) };
+                        *dst /= **l_val;
+                        assert!(dst.is_finite());
                     }
                     // here it now becomes implicitly 0,
                     // likely this should introduce NaN or some other behavior.

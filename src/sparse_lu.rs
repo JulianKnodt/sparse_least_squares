@@ -6,13 +6,24 @@ use crate::csc::{Csc, CscBuilder};
 pub struct LeftLookingLUFactorization<T> {
     /// A single matrix stores both the lower and upper triangular components
     l_u: Csc<T>,
+
+    pivot: Vec<usize>,
 }
 
 impl LeftLookingLUFactorization<F> {
     /// Returns the joint L\U matrix. Here, `L` implicitly has 1 along the diagonal.
+    /// Do not forget that there is a pivot if reading from this matrix
+    #[inline]
     pub fn lu(&self) -> &Csc<F> {
         &self.l_u
     }
+
+    /// Pivot vector for the LU matrix
+    #[inline]
+    pub fn pivot(&self) -> &[usize] {
+        &self.pivot
+    }
+    //fn apply_pivot<T>(&self, v: &mut [T]) {}
 
     /*
     /// Returns the upper triangular part of this matrix.
@@ -59,17 +70,29 @@ impl LeftLookingLUFactorization<F> {
         assert_eq!(a.nrows(), a.ncols());
         let n = a.nrows();
 
+        let mut pivot = vec![0; n];
+        for i in 0..n {
+            pivot[i] = i;
+        }
+
         // this initially starts as an identity  matrix.
         // but the ones are all implicit.
-        let mut csc_builder = CscBuilder::new(n, n);
+        let mut csc_builder: CscBuilder<F> = CscBuilder::new(n, n);
 
         let mut val_buf = vec![];
         let mut pat_contains = vec![false; n];
         let mut pat_buf = vec![];
         let mut stack = vec![];
 
-        for ci in 0..a.ncols() {
+        for ci in 0..n {
             let curr_mat = csc_builder.build();
+            /*
+            let col_iter = curr_mat.col_iter(ci);
+            let opt = col_iter
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .expect("Non-full rank input").0;
+            println!("{}", opt);
+            */
 
             let (col_vals, col_ris) = a.col(ci);
             curr_mat.pattern().sparse_lower_triangular_solve_bool(
@@ -84,7 +107,6 @@ impl LeftLookingLUFactorization<F> {
                     .enumerate()
                     .filter_map(|(i, c)| c.then_some(i)),
             );
-
 
             val_buf.resize(pat_buf.len(), 0.);
 
@@ -126,6 +148,6 @@ impl LeftLookingLUFactorization<F> {
 
         let l_u = csc_builder.build();
         assert!(l_u.values().iter().copied().all(F::is_finite));
-        Self { l_u }
+        Self { l_u, pivot }
     }
 }

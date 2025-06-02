@@ -72,7 +72,36 @@ pub fn test_lu_fact_sparse() {
     lu_fact.solve(&mut out, &mut buf);
     let solved = a.vecmul(&out);
     for i in 0..3 {
-      assert!((solved[i] - 1.).abs() < 1e-5);
+        assert!((solved[i] - 1.).abs() < 1e-5);
+    }
+}
+
+#[test]
+pub fn test_lu_fact_sparse_pivot() {
+    let a = Csc::from_triplets(
+        3,
+        3,
+        &mut [
+            ([0, 1], 50.),
+            ([0, 2], 238.28),
+            ([1, 1], 1000.),
+            ([2, 0], 87.),
+        ],
+    )
+    .unwrap();
+    let lu_fact = LeftLookingLUFactorization::new(&a);
+    let mut buf = [0.; 3];
+    let mut out = [100., 0.02, 10.];
+    let og = out;
+    lu_fact.solve(&mut out, &mut buf);
+    let solved = a.vecmul(&out);
+    for i in 0..3 {
+        assert!(
+            (solved[i] - og[i]).abs() < 1e-3,
+            "i={i}: {} {} (whole = {solved:?})",
+            solved[i],
+            og[i]
+        );
     }
 }
 
@@ -85,10 +114,10 @@ pub fn test_lu_fact_dense() {
             ([0, 0], 47.),
             ([0, 1], 91.),
             ([0, 2], 0.),
-            ([1, 0], 92.),
+            ([1, 0], -92.),
             ([1, 1], 12.),
             ([1, 2], 31.),
-            ([2, 0], 16.),
+            ([2, 0], -16.),
             ([2, 1], 0.),
             ([2, 2], 87.),
         ],
@@ -100,6 +129,6 @@ pub fn test_lu_fact_dense() {
     lu_fact.solve(&mut out, &mut buf);
     let solved = a.vecmul(&out);
     for i in 0..3 {
-      assert!((solved[i] - 1.).abs() < 1e-5);
+        assert!((solved[i] - 1.).abs() < 1e-5);
     }
 }
